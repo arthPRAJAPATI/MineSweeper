@@ -1,228 +1,164 @@
 package minesweeper;
 
+import java.util.Arrays;
 import java.util.Random;
 import java.util.Scanner;
 
 public class Main {
+    private static final int SIZE = 9;
+    private static final char UNEXPLORED = '.';
+    private static final char MARKED = '*';
+    private static final char FREE = '/';
+    private static boolean[][] hasMine;
+    private static char[][] minefield;
+
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         System.out.println("How many mines do you want on the field?");
         int noOfMines = sc.nextInt();
         sc.nextLine();
-        int countMines = noOfMines;
-        int x = 9;
-        int y = 9;
-        char[][] mineSweep;
 
-            mineSweep = intializeMine(x, y, noOfMines);
-            mineSweep = getNumberedSweep(mineSweep);
-            printlnMine(mineSweep);
-        do {
-            System.out.println("Set/delete mines marks (x and y coordinates):");
-            String[] coord = sc.nextLine().split(" ");
-            int j = Integer.parseInt(coord[0]) - 1;
-            int i = Integer.parseInt(coord[1]) - 1;
-            if(mineSweep[i][j] == '.') {
-                mineSweep[i][j] = '*';
-                printlnMine(mineSweep);
-            } else if(mineSweep[i][j] == '*') {
-                mineSweep[i][j] = '.';
-                printlnMine(mineSweep);
-            } else if (mineSweep[i][j] == 'X') {
-                mineSweep[i][j] = '*';
-                countMines--;
-                printlnMine(mineSweep);
-            }else {
-                System.out.println("There is a number here!");
+        // Initialize minefield and mine tracking
+        hasMine = new boolean[SIZE][SIZE];
+        minefield = new char[SIZE][SIZE];
+        initializeMinefield(noOfMines);
+        boolean firstMove = true;
+
+        while (true) {
+            printMinefield();
+            System.out.println("Set/unset mine marks or claim a cell as free:");
+            String[] input = sc.nextLine().split(" ");
+            int column = Integer.parseInt(input[0]) - 1;
+            int row = Integer.parseInt(input[1]) - 1;
+            String command = input[2];
+
+            if (command.equals("mine")) {
+                toggleMark(row, column);
+            } else if (command.equals("free")) {
+                if (firstMove) {
+                    ensureFirstMoveSafe(row, column);
+                    firstMove = false;
+                }
+                if (!exploreCell(row, column)) {
+                    printMinefieldWithMines();
+                    System.out.println("You stepped on a mine and failed!");
+                    break;
+                }
             }
 
-        } while(countMines > 0);
-        System.out.println("Congratulations! You found all mines!");
+            if (checkWinCondition(noOfMines)) {
+                System.out.println("Congratulations! You found all the mines!");
+                break;
+            }
+        }
     }
 
-    private static char[][] getNumberedSweep(char[][] mineSweep) {
-        for(int i = 0; i < mineSweep.length; i++){
-            for(int j = 0; j < mineSweep[i].length; j++) {
-                if(mineSweep[i][j] == '.') {
-                    int mineCount = getSurrondingMines(i, j, mineSweep);
-                    if (mineCount > 0) {
-                        mineSweep[i][j] = Character.forDigit(mineCount, 10);
+    private static void initializeMinefield(int mineToAdd) {
+        // Initialize all cells as unexplored
+        for (char[] row : minefield) Arrays.fill(row, UNEXPLORED);
+        Random r = new Random();
+        while (mineToAdd > 0) {
+            int randRow = r.nextInt(SIZE);
+            int randCol = r.nextInt(SIZE);
+            if (!hasMine[randRow][randCol]) {
+                hasMine[randRow][randCol] = true;
+                mineToAdd--;
+            }
+        }
+    }
+
+    private static void ensureFirstMoveSafe(int row, int col) {
+        if (hasMine[row][col]) {
+            // Move the mine to a new location
+            hasMine[row][col] = false;
+            Random r = new Random();
+            while (true) {
+                int newRow = r.nextInt(SIZE);
+                int newCol = r.nextInt(SIZE);
+                if (newRow != row || newCol != col) {
+                    if (!hasMine[newRow][newCol]) {
+                        hasMine[newRow][newCol] = true;
+                        break;
                     }
                 }
             }
         }
-        return mineSweep;
     }
 
-    private static void printlnMine(char[][] mineSweep) {
-        System.out.println(" |123456789|\n" +
-                "-|---------|");
-        for(int i = 0; i < mineSweep.length; i++){
-            System.out.print(i + 1 + "|");
-            for(int j = 0; j < mineSweep[i].length; j++) {
-                if(mineSweep[i][j] == 'X') {
-                    System.out.print(".");
-                } else {
-                    System.out.print(mineSweep[i][j]);
-                }
+    private static void toggleMark(int row, int col) {
+        if (minefield[row][col] == UNEXPLORED) {
+            minefield[row][col] = MARKED;
+        } else if (minefield[row][col] == MARKED) {
+            minefield[row][col] = UNEXPLORED;
+        }
+    }
 
+    private static boolean exploreCell(int row, int col) {
+        if (hasMine[row][col]) return false;
+        if (minefield[row][col] == UNEXPLORED || minefield[row][col] == MARKED) {
+            int adjacentMines = countAdjacentMines(row, col);
+            if (adjacentMines == 0) {
+                minefield[row][col] = FREE;
+                // Explore adjacent cells
+                for (int i = Math.max(0, row - 1); i <= Math.min(SIZE - 1, row + 1); i++) {
+                    for (int j = Math.max(0, col - 1); j <= Math.min(SIZE - 1, col + 1); j++) {
+                        if (minefield[i][j] == UNEXPLORED || minefield[i][j] == MARKED) {
+                            exploreCell(i, j);
+                        }
+                    }
+                }
+            } else {
+                minefield[row][col] = Character.forDigit(adjacentMines, 10);
             }
-            System.out.print("|\n");
+        }
+        return true;
+    }
+
+    private static int countAdjacentMines(int row, int col) {
+        int count = 0;
+        for (int i = Math.max(0, row - 1); i <= Math.min(SIZE - 1, row + 1); i++) {
+            for (int j = Math.max(0, col - 1); j <= Math.min(SIZE - 1, col + 1); j++) {
+                if (hasMine[i][j]) count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean checkWinCondition(int noOfMines) {
+        int correctMarks = 0;
+        int exploredCells = 0;
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                if (minefield[i][j] == MARKED && hasMine[i][j]) correctMarks++;
+                if (minefield[i][j] != UNEXPLORED && minefield[i][j] != MARKED) exploredCells++;
+            }
+        }
+        return correctMarks == noOfMines && exploredCells == (SIZE * SIZE - noOfMines);
+    }
+
+    private static void printMinefield() {
+        System.out.println(" |123456789|");
+        System.out.println("-|---------|");
+        for (int i = 0; i < SIZE; i++) {
+            System.out.print((i + 1) + "|");
+            for (int j = 0; j < SIZE; j++) {
+                System.out.print(minefield[i][j]);
+            }
+            System.out.println("|");
         }
         System.out.println("-|---------|");
     }
 
-    private static char[][] intializeMine(int x, int y, int mineToAdd) {
-        char[][] init = new char[x][y];
-        Random r = new Random();
-        for(int i = 0; i < x; i++){
-            for(int j = 0; j < y; j++) {
-                int rand = r.nextInt(10);
-                if(mineToAdd > 0 && rand < 7){
-                    init[i][j] = 'X';
-                    mineToAdd--;
-                } else {
-                    init[i][j] = '.';
-                }
+    private static void printMinefieldWithMines() {
+        System.out.println(" |123456789|");
+        System.out.println("-|---------|");
+        for (int i = 0; i < SIZE; i++) {
+            System.out.print((i + 1) + "|");
+            for (int j = 0; j < SIZE; j++) {
+                System.out.print(hasMine[i][j] ? 'X' : minefield[i][j]);
             }
+            System.out.println("|");
         }
-        return init;
+        System.out.println("-|---------|");
     }
-
-    private static int getSurrondingMines(int i, int j, char[][] init) {
-        int count = 0;
-        if((i == 0 && j == 0)) {
-            if(init[i + 1][j + 1] == 'X') {
-                count++;
-            }
-            if(init[i][j + 1] == 'X') {
-                count++;
-            }
-            if(init[i + 1][j] == 'X') {
-                count++;
-            }
-            return count;
-        } else if (i == init.length - 1 && j == 0) {
-            if(init[i - 1][j + 1] == 'X') {
-                count++;
-            }
-            if(init[i - 1][j] == 'X') {
-                count++;
-            }
-            if(init[i][j + 1] == 'X') {
-                count++;
-            }
-            return count;
-        } else if (i == 0 && j == init[i].length - 1) {
-            if(init[i][j - 1] == 'X') {
-                count++;
-            }
-            if(init[i + 1][j - 1] == 'X') {
-                count++;
-            }
-            if(init[i + 1][j] == 'X') {
-                count++;
-            }
-            return count;
-        } else if (i == init.length - 1 && j == init[i].length - 1) {
-            if(init[i - 1][j - 1] == 'X') {
-                count++;
-            }
-            if(init[i][j - 1] == 'X') {
-                count++;
-            }
-            if(init[i - 1][j] == 'X') {
-                count++;
-            }
-            return count;
-        }
-        if (i == 0) {
-            count = getCountBelow(i, j, init, count) + getCountsides(i, j, init, count);
-        } else if(j == 0) {
-            count = getCountUpDown(i, j, init, count) + getCountRight(i, j, init, count);
-        } else if(i == init.length - 1) {
-            count = getCountAbove(i, j, init, count) + getCountsides(i, j, init, count);
-        } else if (j == init.length - 1) {
-            count = getCountUpDown(i, j, init, count) + getCountLeft(i, j, init, count);
-        } else {
-            count = getCountUpDown(i, j, init, count) + getCountLeft(i, j, init, count) + getCountRight(i, j, init, count);
-        }
-        return count;
-    }
-
-    private static int getCountRight(int i, int j, char[][] init, int count) {
-        if(init[i + 1][j + 1] == 'X') {
-            count++;
-        }
-        if(init[i][j + 1] == 'X') {
-            count++;
-        }
-        if(init[i - 1][j + 1] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-    private static int getCountLeft(int i, int j, char[][] init, int count) {
-        if(init[i - 1][j - 1] == 'X') {
-            count++;
-        }
-        if(init[i][j - 1] == 'X') {
-            count++;
-        }
-        if(init[i + 1][j - 1] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-    private static int getCountUpDown(int i, int j, char[][] init, int count) {
-        if(init[i + 1][j] == 'X') {
-            count++;
-        }
-        if(init[i - 1][j] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-    private static int getCountsides(int i, int j, char[][] init, int count) {
-        if(init[i][j + 1] == 'X') {
-            count++;
-        }
-        if(init[i][j - 1] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-    private static int getCountBelow(int i, int j, char[][] init, int count) {
-        if(init[i + 1][j + 1] == 'X') {
-            count++;
-        }
-        if(init[i + 1][j - 1] == 'X') {
-            count++;
-        }
-        if(init[i + 1][j] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-    private static int getCountAbove(int i, int j, char[][] init, int count) {
-        if(init[i - 1][j + 1] == 'X') {
-            count++;
-        }
-        if(init[i - 1][j - 1] == 'X') {
-            count++;
-        }
-        if(init[i - 1][j] == 'X') {
-            count++;
-        }
-        return count;
-    }
-
-
 }
-
-
